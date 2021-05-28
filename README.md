@@ -3,6 +3,6 @@ This project is developed using Tuya SDK, which enables you to quickly develop b
 For more information, please check Tuya Developer Website.
 # Information
 ## Schematic：
-![SCH](./pic/SCH.png)
+![SCH](https://github.com/CN-Antonio/tuya_RGB_Strip/tree/main/pic/SCH.PNG)
 ## PCB：
-![PCB](./pic/PCB.png)
+![PCB](https://github.com/CN-Antonio/tuya_RGB_Strip/tree/main/pic/PCB.PNG)
