@@ -9,8 +9,8 @@
  */
 
 /* 
-配网模式：拉低Pin7
-*/
+ *配网模式：拉低Pin7
+ */
 
 #include <Arduino.h>
 #include <TuyaWifi.h>
@@ -32,7 +32,8 @@ int wifi_key_pin = 7;
 #define DPID_SCENEMODE 50
 #define DPID_MUSIC 51
 
-bool power_status;
+bool power_status = false; // 当前WS2812电源状态
+bool power_commad = false; // 接收到的WS2812电源指令
 bool mode_status;
 unsigned int bright_value;
 
@@ -48,7 +49,7 @@ unsigned char mcu_ver[] = {"1.0.0"};
 
 // WS2812
 #define NUM_LEDS 24
-#define LED_DATA_PIN 13
+#define LED_DATA_PIN 12
 CRGB leds[NUM_LEDS];
 
 /* last time */
@@ -66,7 +67,7 @@ void setup()
     //Initialize networking keys.
     pinMode(wifi_key_pin, INPUT_PULLUP);
     // function init
-    wifi_key_led_init();
+    wifi_key_led_init(); //??
 
     // Enter the PID and MCU software version
     my_device.init(pid, mcu_ver);
@@ -78,13 +79,9 @@ void setup()
     my_device.dp_update_all_func_register(dp_update_all);
 
     // WS2812
-    FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
+    FastLED.addLeds<WS2812B, LED_DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
 
     last_time = millis();
-}
-
-void wifi_key_led_init(void)
-{
 }
 
 void loop()
@@ -92,6 +89,15 @@ void loop()
     my_device.uart_service(); //串口函数
 
     wifi_connect(); // 配网函数
+
+    light_control(); //灯控函数
+
+    // 最后上报
+    my_device.dp_update_all_func_register(dp_update_all);
+}
+
+void wifi_key_led_init(void)
+{
 }
 
 void wifi_connect(void)
@@ -129,6 +135,36 @@ void wifi_connect(void)
     delay(10);
 }
 
+void light_control(void)
+{
+    if (power_commad == false) // 关灯指令下达
+    {
+        if (power_status == true)
+        {
+            for (int i = 0; i < NUM_LEDS; i++)
+            {
+                leds[i] = CRGB ::Black;
+                FastLED.show();
+            }
+            power_status = false;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < NUM_LEDS; i++)
+        {
+            // Turn the LED on, then pause
+            leds[i] = CRGB::Red;
+            FastLED.show();
+            delay(50);
+            // Now turn the LED off, then pause
+            leds[i] = CRGB::Black;
+            FastLED.show();
+            delay(0);
+        }
+    }
+}
+
 /**
  * @description: 注册函数，DP download callback function.
  * @param {unsigned char} dpid
@@ -140,6 +176,9 @@ unsigned char dp_process(unsigned char dpid, const unsigned char value[], unsign
 {
     switch (dpid)
     {
+    case DPID_POWER:
+        power_commad = my_device.mcu_get_dp_download_data(dpid, value, length);
+        break;
     default:
         break;
     }
