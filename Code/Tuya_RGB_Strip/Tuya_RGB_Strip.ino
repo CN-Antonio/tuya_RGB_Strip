@@ -23,6 +23,10 @@ SoftwareSerial DebugSerial(8, 9);
 unsigned char led_state = 0;
 /* Connect network button pin */
 int wifi_key_pin = 7;
+// WS2812
+#define NUM_LEDS 24
+#define LED_DATA_PIN 12
+CRGB leds[NUM_LEDS];
 
 /* DPID, DP type*/
 #define DPID_POWER 20
@@ -32,9 +36,9 @@ int wifi_key_pin = 7;
 #define DPID_SCENEMODE 50
 #define DPID_MUSIC 51
 
-bool power_status = false; // 当前WS2812电源状态
-bool power_commad = false; // 接收到的WS2812电源指令
-bool mode_status;
+bool power_status = false; // (020)当前WS2812电源状态
+bool power_commad = false; // (020)接收到的WS2812电源指令
+unsigned char mode_status; // (021)接收到模式指令
 unsigned int bright_value;
 
 unsigned char dp_array[][2] = {{DPID_POWER, DP_TYPE_BOOL},
@@ -47,13 +51,9 @@ unsigned char dp_array[][2] = {{DPID_POWER, DP_TYPE_BOOL},
 unsigned char pid[] = {"gblpdmqp2emw9qug"};
 unsigned char mcu_ver[] = {"1.0.0"};
 
-// WS2812
-#define NUM_LEDS 24
-#define LED_DATA_PIN 12
-CRGB leds[NUM_LEDS];
-
 /* last time */
-unsigned long last_time = 0;
+unsigned long wifi_last_time = 0;
+unsigned long RGB_last_time = 0;
 
 void setup()
 {
@@ -79,9 +79,10 @@ void setup()
     my_device.dp_update_all_func_register(dp_update_all);
 
     // WS2812
-    FastLED.addLeds<WS2812B, LED_DATA_PIN, RGB>(leds, NUM_LEDS); // GRB ordering is typical
+    FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(leds, NUM_LEDS); // GRB ordering is typical
 
-    last_time = millis();
+    wifi_last_time = millis();
+    RGB_last_time = millis();
 }
 
 void loop()
@@ -90,7 +91,7 @@ void loop()
 
     wifi_connect(); // 配网函数
 
-    light_control(); //灯控函数
+    power_control(); //电源函数
 
     // 最后上报
     my_device.dp_update_all_func_register(dp_update_all);
@@ -115,54 +116,92 @@ void wifi_connect(void)
     /* LED blinks when network is being connected */
     if ((my_device.mcu_get_wifi_work_state() != WIFI_LOW_POWER) && (my_device.mcu_get_wifi_work_state() != WIFI_CONN_CLOUD) && (my_device.mcu_get_wifi_work_state() != WIFI_SATE_UNKNOW))
     {
-        if (millis() - last_time >= 500)
+        if (millis() - wifi_last_time >= 500)
         {
-            last_time = millis();
             /* Toggle current LED status */
             if (led_state == LOW)
-            {
                 led_state = HIGH;
-            }
             else
-            {
                 led_state = LOW;
-            }
-
             digitalWrite(LED_BUILTIN, led_state);
+            wifi_last_time = millis() + 10;
         }
     }
-
-    delay(10);
+    // delay(10);
 }
 
-void light_control(void)
+void power_control(void)
 {
+    // power
     if (power_commad == false) // 关灯指令下达
     {
         if (power_status == true)
         {
             for (int i = 0; i < NUM_LEDS; i++)
-            {
                 leds[i] = CRGB ::Black;
-                FastLED.show();
-            }
+            FastLED.show();
             power_status = false;
+            digitalWrite(LED_BUILTIN, LOW);
         }
     }
-    else
+
+    if (power_commad == true) // 电源开指令
     {
-        for (int i = 0; i < NUM_LEDS; i++)
+        power_status = true;
+        digitalWrite(LED_BUILTIN, HIGH);
+        light_control();
+    }
+}
+
+void light_control(void)
+{
+    switch (mode_status)
+    {
+    case 0: // white
+        RGB_white();
+        break;
+    case 1: //colour
+        RGB_colour();
+        break;
+    case 2: //scene
+        break;
+    case 3: //music
+        break;
+    default:
+        break;
+    }
+}
+
+void RGB_white(void)
+{
+    for (int i = 0; i < NUM_LEDS; i++)
+        leds[i] = CRGB::White;
+    FastLED.show();
+}
+void RGB_colour(void)
+{
+    int i = 0;
+    while (i < 24)
+    {
+        if (millis() - RGB_last_time > 50)
         {
-            // Turn the LED on, then pause
-            leds[i] = CRGB::Red;
+            if (i % 3 == 0)
+                leds[i] = CRGB::Red;
+            else if (i % 3 == 1)
+                leds[i] = CRGB::Green;
+            else
+                leds[i] = CRGB::Blue;
             FastLED.show();
-            delay(50);
-            // Now turn the LED off, then pause
-            leds[i] = CRGB::Black;
-            FastLED.show();
-            delay(0);
+            RGB_last_time = millis();
+            i++;
         }
     }
+    for (int i = 0; i < NUM_LEDS; i++)
+    {
+        // Now turn the LED off, then pause
+        leds[i] = CRGB::Black;
+    }
+    FastLED.show();
 }
 
 /**
@@ -178,6 +217,9 @@ unsigned char dp_process(unsigned char dpid, const unsigned char value[], unsign
     {
     case DPID_POWER:
         power_commad = my_device.mcu_get_dp_download_data(dpid, value, length);
+        break;
+    case DPID_MODE:
+        mode_status = my_device.mcu_get_dp_download_data(dpid, value, length);
         break;
     default:
         break;

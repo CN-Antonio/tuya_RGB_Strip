@@ -1,6 +1,6 @@
 {
-    "board": "arduino:avr:pro",
+    "board": "arduino:avr:uno",
     "port": "COM9",
-    "sketch": "Code\\Test\\Test.ino",
-    "configuration": "cpu=16MHzatmega328"
+    "sketch": "Code\\Tuya_RGB_Strip\\Tuya_RGB_Strip.ino",
+    "programmer": "arduino:avrispmkii"
 }
